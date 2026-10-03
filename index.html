@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Execution Context Lab</title>
+<style>
+:root{
+  --bg:#0a0c11; --panel:#11141b; --panel2:#0d1017; --line:#1f2430; --line-soft:#191d27;
+  --text:#dde1ea; --dim:#6b7280; --dim2:#4b5262;
+  --stack:#7c93ff; --heap:#e879a8; --micro:#f0b84e; --macro:#39c3a8; --red:#ff6b6b;
+  --mono:ui-monospace,'JetBrains Mono','SF Mono',Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme: light){:root:not([data-theme="dark"]){--bg:#f3f4f7;--panel:#fff;--panel2:#f7f8fa;--line:#e2e4ea;--line-soft:#ececf0;--text:#1d2129;--dim:#6b7280;--dim2:#9aa0ab;}}
+*{box-sizing:border-box}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;background:var(--bg);color:var(--text);font-family:var(--mono);padding:18px;padding-top:calc(18px + env(safe-area-inset-top,0px));padding-bottom:calc(18px + env(safe-area-inset-bottom,0px));font-size:13.5px;-webkit-font-smoothing:antialiased;}
+.top{max-width:1060px;margin:0 auto}
+h1{font-size:15px;margin:0 0 3px;font-weight:600;letter-spacing:.01em}
+.sub{font-size:12px;color:var(--dim);margin:0 0 14px}
+textarea{width:100%;min-height:172px;background:var(--panel2);color:var(--text);border:1px solid var(--line);border-radius:6px;padding:12px;font-family:var(--mono);font-size:13px;line-height:1.65;resize:vertical;outline:none}
+textarea:focus{border-color:var(--stack)}
+.row{display:flex;gap:10px;margin:10px 0 4px;flex-wrap:wrap;align-items:center}
+button{background:var(--stack);color:#0a0c11;border:0;padding:8px 18px;border-radius:5px;cursor:pointer;font-size:13px;font-family:var(--mono);font-weight:600}
+button:hover{filter:brightness(1.08)}
+button.sec{background:transparent;border:1px solid var(--line);color:var(--text);font-weight:500;padding:6px 14px}
+button.sec:hover{border-color:var(--dim2)}
+button:disabled{opacity:.3;cursor:default;filter:none}
+.phase{display:inline-flex;align-items:center;gap:6px;padding:4px 11px;border-radius:4px;font-size:12px;font-weight:600;border:1px solid transparent}
+.phase.mem{background:rgba(240,184,78,.1);color:var(--micro);border-color:rgba(240,184,78,.25)}
+.phase.exec{background:rgba(57,195,168,.1);color:var(--macro);border-color:rgba(57,195,168,.25)}
+.phase::before{content:'';width:6px;height:6px;border-radius:50%;background:currentColor}
+.err{color:var(--red);font-size:12.5px;white-space:pre-wrap;padding:8px 0}
+.wrap{display:grid;grid-template-columns:1fr;gap:12px;max-width:1060px;margin:14px auto 0}
+@media(min-width:800px){.wrap{grid-template-columns:1.15fr 1fr}}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:7px;overflow:auto}
+.code{max-height:58vh;padding:12px 0}
+.side{max-height:58vh;display:flex;flex-direction:column;gap:10px;overflow-y:auto;padding-right:2px}
+.card{border-radius:7px;border:1px solid var(--line);background:var(--panel);border-left-width:3px;padding:9px 11px}
+table{width:100%;border-collapse:collapse;font-size:12px}
+td{padding:3px 2px;border-bottom:1px solid var(--line-soft)}
+td:first-child{color:var(--dim);width:38%}
+tr:last-child td{border-bottom:none}
+.label{font-size:11px;color:var(--dim);font-weight:600;letter-spacing:.02em;margin-bottom:7px;display:flex;align-items:center;gap:6px}
+.dot{width:7px;height:7px;border-radius:50%;flex:none}
+@keyframes stackPush{from{opacity:0;transform:translateY(-8px) scale(.98)}to{opacity:1;transform:translateY(0) scale(1)}}
+.frame{border:1px solid var(--line);border-left:3px solid var(--dim2);border-radius:5px;padding:7px 10px;margin-bottom:8px;background:var(--panel2);animation:stackPush .25s ease;opacity:.5;transition:opacity .2s}
+.frame:last-child{margin-bottom:0}
+.frame.top{opacity:1;background:rgba(124,147,255,.09);box-shadow:0 3px 12px rgba(124,147,255,.12);border-left-width:4px;border-left-color:var(--stack)}
+.fname{font-size:11.5px;color:var(--text);font-weight:600;margin-bottom:3px;display:flex;align-items:center;justify-content:space-between}
+.frame.top .fname{color:var(--stack)}
+.running{font-size:9.5px;font-weight:700;letter-spacing:.03em;padding:1px 7px;border-radius:3px}
+.paused{font-size:9.5px;color:var(--dim2)}
+.phase.error{background:rgba(255,107,107,.1);color:var(--red);border-color:rgba(255,107,107,.25)}
+.heapbox{border:1px solid var(--line);border-left:3px solid var(--heap);border-radius:5px;padding:6px 9px;margin-bottom:7px;background:var(--panel2);animation:stackPush .25s ease}
+.heapbox:last-child{margin-bottom:0}
+.heapid{font-size:11.5px;color:var(--heap);font-weight:600;margin-bottom:3px}
+.qitem{font-size:12px;border-left:3px solid var(--micro);background:var(--panel2);border-radius:4px;padding:5px 9px;margin-bottom:5px}
+#macro .qitem{border-left-color:var(--macro)}
+.empty{color:var(--dim2);font-size:12px;font-style:normal}
+.out{font-size:12.5px;color:var(--macro);line-height:1.8}
+.note{font-size:12px;color:var(--dim);max-width:1060px;margin:12px auto 0;line-height:1.6}
+.stepbar{display:flex;align-items:center;gap:12px;max-width:1060px;margin:16px auto 6px}
+.steplabel{font-size:12px;color:var(--dim)}
+.gutter{display:inline-block;width:30px;color:var(--dim2);text-align:right;margin-right:12px;user-select:none}
+.cl{display:block;padding:1px 14px;line-height:1.75;border-left:3px solid transparent}
+.cl.active{background:rgba(124,147,255,.1);border-left-color:var(--stack)}
+</style>
+</head>
+<body>
+<div class="top">
+<h1>Execution Context Lab</h1>
+<p class="sub">Step through the call stack, heap, and event loop of your own JavaScript.</p>
+<textarea id="src" spellcheck="false">console.log(a);
+let a = 5;</textarea>
+<div class="row">
+  <button id="run">Run</button>
+  <span id="phaseTag" class="phase mem" style="display:none"></span>
+</div>
+<div id="err" class="err"></div>
+</div>
+
+<div class="wrap" id="viz" style="display:none">
+  <div class="panel code"><pre id="codeView" style="margin:0;font-size:13.5px;line-height:1.7;white-space:pre-wrap"></pre></div>
+  <div class="side">
+    <div class="panel" style="padding:11px"><span class="label"><span class="dot" style="background:var(--stack)"></span>Call stack</span><div id="frames"></div></div>
+    <div class="panel" style="padding:11px"><span class="label"><span class="dot" style="background:var(--heap)"></span>Heap — objects &amp; arrays, held by reference</span><div id="heap"></div></div>
+    <div class="panel" style="padding:11px"><span class="label"><span class="dot" style="background:var(--micro)"></span>Microtask queue — Promises, runs first</span><div id="micro"></div></div>
+    <div class="panel" style="padding:11px"><span class="label"><span class="dot" style="background:var(--macro)"></span>Macrotask queue — setTimeout, runs after</span><div id="macro"></div></div>
+    <div class="panel" style="padding:11px"><span class="label"><span class="dot" style="background:var(--macro)"></span>Console output</span><div id="out" class="out"></div></div>
+  </div>
+</div>
+<div class="stepbar" id="stepbar" style="display:none">
+  <button class="sec" id="prev">‹ Prev</button>
+  <button class="sec" id="next">Next ›</button>
+  <span class="steplabel" id="stepLabel"></span>
+</div>
+<div style="max-width:1060px;margin:0 auto">
+  <p id="explain" style="font-size:13px;line-height:1.55;padding:11px 14px;background:var(--panel);border:1px solid var(--line);border-radius:6px;margin:0;transition:border-color .2s"></p>
+  <p class="note">Supports var/let/const (with TDZ), functions &amp; function expressions, arrow functions, objects/arrays with heap references, property access &amp; assignment, setTimeout, Promise.resolve().then(), console.log, + − × ÷. No if/for/closures-over-outer-let yet.</p>
+</div>
+
+<script>
+class ReturnSignal{constructor(v){this.value=v;}}
+function tokenize(src){
+  let i=0,line=0,tokens=[];
+  const isD=c=>/[0-9]/.test(c), isIS=c=>/[A-Za-z_$]/.test(c), isIP=c=>/[A-Za-z0-9_$]/.test(c);
+  while(i<src.length){
+    let c=src[i];
+    if(c==='\n'){line++;i++;continue;}
+    if(/\s/.test(c)){i++;continue;}
+    if(c==='/'&&src[i+1]==='/'){while(i<src.length&&src[i]!=='\n')i++;continue;}
+    if(c==='='&&src[i+1]==='>'){tokens.push({t:'p',v:'=>',line});i+=2;continue;}
+    if(isD(c)){let j=i;while(j<src.length&&/[0-9.]/.test(src[j]))j++;tokens.push({t:'num',v:src.slice(i,j),line});i=j;continue;}
+    if(c==='"'||c==="'"){let q=c,j=i+1,s='';while(j<src.length&&src[j]!==q){s+=src[j];j++;}tokens.push({t:'str',v:s,line});i=j+1;continue;}
+    if(isIS(c)){let j=i;while(j<src.length&&isIP(src[j]))j++;tokens.push({t:'id',v:src.slice(i,j),line});i=j;continue;}
+    if('+-*/=(){}[];,.:'.includes(c)){tokens.push({t:'p',v:c,line});i++;continue;}
+    i++;
+  }
+  tokens.push({t:'eof',v:null,line});
+  return tokens;
+}
+function parse(tokens){
+  let pos=0;
+  const peek=()=>tokens[pos], next=()=>tokens[pos++];
+  const is=(v)=>peek().v===v;
+  const eat=(v)=>{ if(peek().v===v){return next();} throw new Error(`Expected "${v}" near line ${peek().line+1}, got "${peek().v}"`); };
+  const eat2id=()=>{ const tk=next(); if(tk.t!=='id') throw new Error(`Expected identifier near line ${tk.line+1}`); return tk.v; };
+  function parseProgram(stopAt){ const r=[]; while(peek().t!=='eof' && peek().v!==stopAt) r.push(parseStatement()); return r; }
+  function parseStatement(){
+    const tk=peek();
+    if(tk.t==='id'&&['var','let','const'].includes(tk.v)) return parseVarDecl();
+    if(tk.t==='id'&&tk.v==='function') return parseFunctionDecl();
+    if(tk.t==='id'&&tk.v==='return') return parseReturn();
+    const expr=parseAssign(); if(is(';')) next();
+    return {type:'ExprStmt',expr,line:tk.line};
+  }
+  function parseVarDecl(){ const kind=next().v; const line=tokens[pos-1].line; const decls=[];
+    while(true){ const name=eat2id(); let init=null; if(is('=')){next(); init=parseAssign();} decls.push({name,init}); if(is(',')){next();continue;} break; }
+    if(is(';')) next(); return {type:'VarDecl',kind,decls,line}; }
+  function parseFunctionDecl(){ const line=peek().line; next(); const name=eat2id(); eat('('); const params=[]; while(!is(')')){ params.push(eat2id()); if(is(','))next(); } eat(')'); eat('{'); const body=parseProgram('}'); eat('}'); return {type:'FunctionDecl',name,params,body,line}; }
+  function parseReturn(){ const line=peek().line; next(); let arg=null; if(!is(';') && !is('}') && peek().t!=='eof'){ arg=parseAssign(); } if(is(';')) next(); return {type:'Return',arg,line}; }
+  function parseAssign(){ const left=parseAdd(); if(is('=') && (left.type==='Identifier'||left.type==='Member')){ next(); const value=parseAssign(); return {type:'Assign',target:left,value,line:left.line}; } return left; }
+  function parseAdd(){ let left=parseMul(); while(is('+')||is('-')){ const op=next().v; const right=parseMul(); left={type:'Binary',op,left,right,line:left.line}; } return left; }
+  function parseMul(){ let left=parseCall(); while(is('*')||is('/')){ const op=next().v; const right=parseCall(); left={type:'Binary',op,left,right,line:left.line}; } return left; }
+  function parseCall(){ let expr=parsePrimary(); while(true){ if(is('.')){ next(); const prop=eat2id(); expr={type:'Member',object:expr,property:prop,computed:false,line:expr.line}; } else if(is('[')){ next(); const prop=parseAssign(); eat(']'); expr={type:'Member',object:expr,property:prop,computed:true,line:expr.line}; } else if(is('(')){ next(); const args=[]; while(!is(')')){ args.push(parseAssign()); if(is(','))next(); } eat(')'); expr={type:'Call',callee:expr,args,line:expr.line}; } else break; } return expr; }
+  function finishArrowBody(params){ if(is('{')){ next(); const body=parseProgram('}'); eat('}'); return {type:'FuncExpr',name:null,params,body}; } const expr=parseAssign(); return {type:'FuncExpr',name:null,params,body:[{type:'Return',arg:expr,line:expr.line}]}; }
+  function tryArrow(){
+    if(peek().t==='id' && tokens[pos+1] && tokens[pos+1].v==='=>' && !['var','let','const','function','return'].includes(peek().v)){ const p=next().v; next(); return finishArrowBody([p]); }
+    if(is('(')){ let tmp=pos+1, collected=[], ok=true;
+      while(tokens[tmp] && tokens[tmp].v!==')'){ if(tokens[tmp].t==='id') collected.push(tokens[tmp].v); else if(tokens[tmp].v===','){} else { ok=false; break; } tmp++; }
+      if(ok && tokens[tmp] && tokens[tmp].v===')' && tokens[tmp+1] && tokens[tmp+1].v==='=>'){ pos=tmp+2; return finishArrowBody(collected); }
+    }
+    return null;
+  }
+  function parsePrimary(){
+    const arrow=tryArrow(); if(arrow) return arrow;
+    const tk=peek();
+    if(tk.t==='num'){ next(); return {type:'Literal',value:parseFloat(tk.v),line:tk.line}; }
+    if(tk.t==='str'){ next(); return {type:'Literal',value:tk.v,line:tk.line}; }
+    if(tk.t==='id'&&tk.v==='function'){ next(); let name=null; if(peek().t==='id'){name=next().v;} eat('('); const params=[]; while(!is(')')){params.push(eat2id()); if(is(','))next();} eat(')'); eat('{'); const body=parseProgram('}'); eat('}'); return {type:'FuncExpr',name,params,body,line:tk.line}; }
+    if(tk.v==='{'){ next(); const props=[]; while(!is('}')){ const key=next().v; eat(':'); const val=parseAssign(); props.push({key,val}); if(is(','))next(); } eat('}'); return {type:'ObjectLit',props,line:tk.line}; }
+    if(tk.v==='['){ next(); const elements=[]; while(!is(']')){ elements.push(parseAssign()); if(is(','))next(); } eat(']'); return {type:'ArrayLit',elements,line:tk.line}; }
+    if(tk.t==='id'){ next(); return {type:'Identifier',name:tk.v,line:tk.line}; }
+    if(tk.v==='('){ next(); const e=parseAssign(); eat(')'); return e; }
+    throw new Error(`Unexpected token "${tk.v}" near line ${tk.line+1}`);
+  }
+  return parseProgram(null);
+}
+
+function run(statements){
+  const steps=[], output=[], heap={}, microQueue=[], macroQueue=[];
+  let heapCounter=0, taskCounter=0;
+  let frames=[{name:'GEC \u00b7 Global',vars:{},order:[]}];
+  function set(frame,name,val){ if(!(name in frame.vars)) frame.order.push(name); frame.vars[name]=val; }
+  function disp(v){
+    if(v==='__undef__') return 'undefined';
+    if(v==='__tdz__') return '<uninitialized> (TDZ)';
+    if(v&&v.__ref) return `\u2192 ${v.__ref} (reference)`;
+    if(v&&v.__fn) return `\u0192 ${v.name||'anonymous'}() {...}`;
+    if(v&&v.__promise) return `Promise {${v.value!==undefined?disp(v.value):'pending'}}`;
+    if(typeof v==='string') return JSON.stringify(v);
+    return String(v);
+  }
+  function snapshot(){ return frames.map(f=>({name:f.name, rows:f.order.map(k=>[k,disp(f.vars[k])])})); }
+  function heapSnap(){ return Object.keys(heap).map(id=>({id, type:heap[id].type, rows:heap[id].order.map(k=>[k,disp(heap[id].props[k])])})); }
+  function addStep(phase,line,explain){ steps.push({phase,line,explain,stack:snapshot(),heap:heapSnap(),micro:microQueue.map(t=>(t.fn.name||'anonymous')+'()'),macro:macroQueue.map(t=>(t.fn.name||'anonymous')+`() [${t.delay}ms]`),out:[...output]}); }
+  function hoist(stmts,frame){ for(const st of stmts){ if(st.type==='VarDecl'){ for(const d of st.decls){ if(!(d.name in frame.vars)){ if(st.kind==='var'){ set(frame,d.name,'__undef__'); addStep('mem',st.line,`Hoist var "${d.name}" \u2192 undefined`); } else { set(frame,d.name,'__tdz__'); addStep('mem',st.line,`Hoist ${st.kind} "${d.name}" \u2192 uninitialized (TDZ)`); } } } } else if(st.type==='FunctionDecl'){ set(frame,st.name,{__fn:true,name:st.name,params:st.params,body:st.body}); addStep('mem',st.line,`Hoist function "${st.name}" into memory`); } } }
+  function lookup(name,frame){
+    if(name in frame.vars){ const v=frame.vars[name]; if(v==='__tdz__') throw new Error(`Cannot access '${name}' before initialization (TDZ)`); return v==='__undef__'?undefined:v; }
+    const g=frames[frames.length-1];
+    if(frame!==g && name in g.vars){ const v=g.vars[name]; if(v==='__tdz__') throw new Error(`Cannot access '${name}' before initialization (TDZ)`); return v==='__undef__'?undefined:v; }
+    throw new Error(`"${name}" is not defined`);
+  }
+  function setVar(name,val,frame){ if(name in frame.vars){ frame.vars[name]=val; return; } const g=frames[frames.length-1]; if(frame!==g && name in g.vars){ g.vars[name]=val; return; } set(frame,name,val); }
+  function newHeap(type){ const id='#'+(++heapCounter); heap[id]={type,props:{},order:[]}; return id; }
+  function invoke(fn,argVals,line){
+    const nf={name:`FEC \u00b7 ${fn.name||'anonymous'}()`,vars:{},order:[]};
+    fn.params.forEach((p,idx)=>set(nf,p, idx<argVals.length?argVals[idx]:'__undef__'));
+    frames.unshift(nf);
+    addStep('exec',line,`Call ${fn.name||'anonymous'}() \u2192 new execution context pushed onto the call stack`);
+    hoist(fn.body,nf);
+    let retVal;
+    try{ for(const st of fn.body) runStatement(st,nf); } catch(sig){ if(sig instanceof ReturnSignal) retVal=sig.value; else throw sig; }
+    frames.shift();
+    addStep('exec',line,`${fn.name||'anonymous'}() returns ${retVal!==undefined?disp(retVal):'undefined'} \u2192 execution context popped`);
+    return retVal;
+  }
+  function evaluate(e,frame){
+    switch(e.type){
+      case 'Literal': return e.value;
+      case 'Identifier': return lookup(e.name,frame);
+      case 'FuncExpr': return {__fn:true,name:e.name,params:e.params,body:e.body};
+      case 'ObjectLit': { const id=newHeap('object'); for(const p of e.props){ const v=evaluate(p.val,frame); heap[id].props[p.key]=v; heap[id].order.push(p.key); } addStep('exec',e.line,`Created object ${id} in the Heap`); return {__ref:id}; }
+      case 'ArrayLit': { const id=newHeap('array'); e.elements.forEach((el,idx)=>{ const v=evaluate(el,frame); heap[id].props[idx]=v; heap[id].order.push(idx); }); addStep('exec',e.line,`Created array ${id} in the Heap`); return {__ref:id}; }
+      case 'Member': { const obj=evaluate(e.object,frame); if(!obj||!obj.__ref) throw new Error('Cannot read property of a non-object'); const key=e.computed?String(evaluate(e.property,frame)):e.property; return heap[obj.__ref].props[key]; }
+      case 'Assign': {
+        const v=evaluate(e.value,frame);
+        if(e.target.type==='Identifier'){ setVar(e.target.name,v,frame); }
+        else { const obj=evaluate(e.target.object,frame); if(!obj||!obj.__ref) throw new Error('Cannot set property on a non-object'); const key=e.target.computed?String(evaluate(e.target.property,frame)):e.target.property; const h=heap[obj.__ref]; if(!(key in h.props)) h.order.push(key); h.props[key]=v; addStep('exec',e.line,`${obj.__ref}.${key} = ${disp(v)} \u2192 mutated in Heap (all references see this change)`); }
+        return v;
+      }
+      case 'Binary': { const l=evaluate(e.left,frame), r=evaluate(e.right,frame); if(e.op==='+') return l+r; if(e.op==='-') return l-r; if(e.op==='*') return l*r; if(e.op==='/') return l/r; break; }
+      case 'Call': {
+        if(e.callee.type==='Member' && e.callee.object.type==='Identifier' && e.callee.object.name==='console' && e.callee.property==='log'){
+          const vals=e.args.map(a=>evaluate(a,frame));
+          output.push(vals.map(v=>typeof v==='string'?v:disp(v)).join(' '));
+          addStep('exec',e.line,`console.log(${vals.map(disp).join(', ')}) \u2192 printed`);
+          return undefined;
+        }
+        if(e.callee.type==='Identifier' && e.callee.name==='setTimeout'){
+          const fnVal=evaluate(e.args[0],frame); const delay=e.args[1]?evaluate(e.args[1],frame):0;
+          macroQueue.push({fn:fnVal,delay,id:++taskCounter});
+          addStep('exec',e.line,`setTimeout() \u2192 callback added to Macrotask Queue (delay ${delay}ms). Code keeps running, it does NOT wait here.`);
+          return undefined;
+        }
+        if(e.callee.type==='Member' && e.callee.object.type==='Identifier' && e.callee.object.name==='Promise' && e.callee.property==='resolve'){
+          const val=e.args[0]?evaluate(e.args[0],frame):undefined; return {__promise:true,value:val};
+        }
+        if(e.callee.type==='Member' && e.callee.property==='then'){
+          const p=evaluate(e.callee.object,frame); const cb=evaluate(e.args[0],frame);
+          microQueue.push({fn:cb,arg:p&&p.value,id:++taskCounter});
+          addStep('exec',e.line,`.then() \u2192 callback added to Microtask Queue`);
+          return {__promise:true,value:undefined};
+        }
+        const argVals=e.args.map(a=>evaluate(a,frame));
+        let fn;
+        if(e.callee.type==='Identifier') fn=lookup(e.callee.name,frame);
+        else if(e.callee.type==='Member'){ const obj=evaluate(e.callee.object,frame); if(!obj||!obj.__ref) throw new Error('Cannot call method on a non-object'); fn=heap[obj.__ref].props[e.callee.property]; }
+        else throw new Error('Unsupported call expression');
+        if(!fn||!fn.__fn) throw new Error('Attempted to call something that is not a function');
+        return invoke(fn,argVals,e.line);
+      }
+    }
+  }
+  function runStatement(st,frame){
+    if(st.type==='VarDecl'){
+      for(const d of st.decls){ if(d.init){ const v=evaluate(d.init,frame); setVar(d.name,v,frame); } else if(st.kind!=='var'){ setVar(d.name,undefined,frame); } addStep('exec',st.line,`${st.kind} ${d.name} = ${d.init?disp(frame.vars[d.name]):'undefined'}`); }
+    } else if(st.type==='FunctionDecl'){
+      /* already hoisted */
+    } else if(st.type==='ExprStmt'){
+      evaluate(st.expr,frame);
+    } else if(st.type==='Return'){
+      const v=st.arg?evaluate(st.arg,frame):undefined;
+      addStep('exec',st.line,`return ${v!==undefined?disp(v):''}`);
+      throw new ReturnSignal(v);
+    }
+  }
+  addStep('mem',null,'GEC (Global Execution Context) created. Scanning the whole file for var/let/const & function declarations before running anything...');
+  hoist(statements,frames[0]);
+  addStep('mem',null,'Memory Creation Phase complete for GEC. Switching to Code Execution Phase — running line by line.');
+  try{
+    for(const st of statements) runStatement(st,frames[0]);
+    addStep('exec',null,'Synchronous code finished. Call Stack is empty except GEC. Event loop checks the Microtask Queue FIRST.');
+    function drainMicro(){ while(microQueue.length){ const task=microQueue.shift(); addStep('exec',null,'Dequeued a microtask (Promise .then) \u2192 running it now'); invoke(task.fn, task.arg!==undefined?[task.arg]:[], null); } }
+    drainMicro();
+    while(macroQueue.length){
+      macroQueue.sort((a,b)=>a.delay-b.delay||a.id-b.id);
+      const task=macroQueue.shift();
+      addStep('exec',null,`Microtask Queue is empty \u2192 Event loop takes ONE task from Macrotask Queue (delay ${task.delay}ms) \u2192 running it`);
+      invoke(task.fn,[],null);
+      drainMicro();
+    }
+    addStep('exec',null,'Both queues are empty. Program finished.');
+  }catch(ex){
+    steps.push({phase:'error',line:null,explain:`Runtime error: ${ex.message} — this is exactly what would happen in a real browser at this exact point in execution.`,stack:snapshot(),heap:heapSnap(),micro:microQueue.map(t=>(t.fn.name||'anonymous')+'()'),macro:macroQueue.map(t=>(t.fn.name||'anonymous')+`() [${t.delay}ms]`),out:[...output]});
+  }
+  return steps;
+}
+
+let steps=[], idx=0, codeLines=[];
+const $ = id=>document.getElementById(id);
+$('run').onclick = ()=>{
+  $('err').textContent='';
+  const src = $('src').value;
+  codeLines = src.split('\n');
+  try{
+    const ast = parse(tokenize(src));
+    steps = run(ast);
+    idx = 0;
+    $('viz').style.display='grid'; $('stepbar').style.display='flex'; $('phaseTag').style.display='inline-block';
+    $('codeView').innerHTML = codeLines.map((l,i)=>`<span class="cl" data-l="${i}"><span class="gutter">${i+1}</span>${(l||' ').replace(/</g,'&lt;')}</span>`).join('\n');
+    render();
+  }catch(ex){
+    $('err').textContent = 'Error: ' + ex.message;
+    $('viz').style.display='none'; $('stepbar').style.display='none'; $('phaseTag').style.display='none';
+  }
+};
+function box(title,id){ return `<div class="${id==='heap'?'heapbox':'frame'}"><div class="${id==='heap'?'heapid':'fname'}">${title}</div></div>`; }
+function render(){
+  const s = steps[idx];
+  const phaseInfo = s.phase==='mem' ? {label:'Phase 1 \u00b7 Memory Creation', color:'var(--micro)'} : s.phase==='error' ? {label:'Runtime Error', color:'var(--red)'} : {label:'Phase 2 \u00b7 Code Execution', color:'var(--macro)'};
+  $('phaseTag').textContent = phaseInfo.label;
+  $('phaseTag').className = 'phase ' + s.phase;
+  document.querySelectorAll('.cl').forEach(el=>el.classList.toggle('active', s.line!==null && Number(el.dataset.l)===s.line));
+  $('frames').innerHTML = s.stack.map((f,i)=>`<div class="frame ${i===0?'top':''}"><div class="fname"><span>${f.name}</span>${i===0?`<span class="running" style="background:${phaseInfo.color}22;color:${phaseInfo.color}">${s.phase==='mem'?'ALLOCATING':s.phase==='error'?'CRASHED':'RUNNING'}</span>`:'<span class="paused">paused — waiting on call above</span>'}</div><table>${f.rows.map(([k,v])=>`<tr><td>${k}</td><td>${v}</td></tr>`).join('')||'<tr><td class="empty">empty</td></tr>'}</table></div>`).join('') || '<span class="empty">empty</span>';
+  $('heap').innerHTML = s.heap.length ? s.heap.map(h=>`<div class="heapbox"><div class="heapid">${h.id} (${h.type})</div><table>${h.rows.map(([k,v])=>`<tr><td>${k}</td><td>${v}</td></tr>`).join('')}</table></div>`).join('') : '<span class="empty">empty — no objects/arrays created yet</span>';
+  $('micro').innerHTML = s.micro.length ? s.micro.map(m=>`<div class="qitem">${m}</div>`).join('') : '<span class="empty">empty</span>';
+  $('macro').innerHTML = s.macro.length ? s.macro.map(m=>`<div class="qitem">${m}</div>`).join('') : '<span class="empty">empty</span>';
+  $('out').innerHTML = s.out.length ? s.out.map(o=>`&gt; ${o.replace(/</g,'&lt;')}`).join('<br>') : '<span class="empty">(nothing printed yet)</span>';
+  $('explain').textContent = s.explain;
+  $('explain').style.borderLeft = '3px solid ' + phaseInfo.color;
+  $('stepLabel').textContent = `Step ${idx+1} / ${steps.length}`;
+  $('prev').disabled = idx===0; $('next').disabled = idx===steps.length-1;
+}
+$('next').onclick=()=>{ if(idx<steps.length-1){idx++;render();} };
+$('prev').onclick=()=>{ if(idx>0){idx--;render();} };
+$('run').click();
+</script>
+</body>
+</html>
