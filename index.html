@@ -3,7 +3,11 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Execution Context Lab</title>
+<title>JS Context Lab — Visualize the JavaScript Call Stack, Heap & Event Loop</title>
+<meta name="description" content="Step through the call stack, heap, and event loop of your own JavaScript. An interactive visualizer for hoisting, closures, memory allocation, and async execution.">
+<meta property="og:title" content="JS Context Lab">
+<meta property="og:description" content="Step through the call stack, heap, and event loop of your own JavaScript.">
+<meta property="og:type" content="website">
 <style>
 :root{
   --bg:#0a0c11; --panel:#11141b; --panel2:#0d1017; --line:#1f2430; --line-soft:#191d27;
@@ -69,7 +73,7 @@ tr:last-child td{border-bottom:none}
 </head>
 <body>
 <div class="top">
-<h1>Execution Context Lab</h1>
+<h1>JS Context Lab</h1>
 <p class="sub">Step through the call stack, heap, and event loop of your own JavaScript.</p>
 <textarea id="src" spellcheck="false">console.log(a);
 let a = 5;</textarea>
